@@ -1,0 +1,43 @@
+{
+  "timestamp": "2026-03-07 20:24:34",
+  "configuration": {
+    "activities": [
+      "standing",
+      "walking",
+      "jumping",
+      "still"
+    ],
+    "sampling_rate_hz": 100.0,
+    "window_size_samples": 50,
+    "n_states": 4
+  },
+  "training": {
+    "n_training_samples": 268,
+    "n_test_samples": 67,
+    "n_features": 130
+  },
+  "test_accuracy": 0.6716417910447762,
+  "per_activity_metrics": {
+    "standing": {
+      "sensitivity": 1.0,
+      "specificity": 0.64,
+      "n_samples": 17
+    },
+    "walking": {
+      "sensitivity": 0.0,
+      "specificity": 0.92,
+      "n_samples": 17
+    },
+    "jumping": {
+      "sensitivity": 0.7058823529411765,
+      "specificity": 1.0,
+      "n_samples": 17
+    },
+    "still": {
+      "sensitivity": 1.0,
+      "specificity": 1.0,
+      "n_samples": 16
+    }
+  },
+  "unseen_data_accuracy": 0.25
+}
