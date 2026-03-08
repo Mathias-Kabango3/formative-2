@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-07 20:24:34",
+  "timestamp": "2026-03-08 13:51:50",
   "configuration": {
     "activities": [
       "standing",
@@ -12,32 +12,32 @@
     "n_states": 4
   },
   "training": {
-    "n_training_samples": 268,
-    "n_test_samples": 67,
+    "n_training_samples": 1110,
+    "n_test_samples": 278,
     "n_features": 130
   },
-  "test_accuracy": 0.6716417910447762,
+  "test_accuracy": 0.6510791366906474,
   "per_activity_metrics": {
     "standing": {
-      "sensitivity": 1.0,
-      "specificity": 0.64,
-      "n_samples": 17
+      "sensitivity": 0.05333333333333334,
+      "specificity": 0.9408866995073891,
+      "n_samples": 75
     },
     "walking": {
-      "sensitivity": 0.0,
-      "specificity": 0.92,
-      "n_samples": 17
+      "sensitivity": 0.8493150684931506,
+      "specificity": 0.9560975609756097,
+      "n_samples": 73
     },
     "jumping": {
-      "sensitivity": 0.7058823529411765,
-      "specificity": 1.0,
-      "n_samples": 17
+      "sensitivity": 0.78125,
+      "specificity": 0.9813084112149533,
+      "n_samples": 64
     },
     "still": {
-      "sensitivity": 1.0,
-      "specificity": 1.0,
-      "n_samples": 16
+      "sensitivity": 0.9848484848484849,
+      "specificity": 0.660377358490566,
+      "n_samples": 66
     }
   },
-  "unseen_data_accuracy": 0.25
+  "unseen_data_accuracy": 0.39285714285714285
 }
