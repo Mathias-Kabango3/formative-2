@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple, Optional
 from scipy import signal
 
 from config import (
-    DATA_RAW_DIR, DATA_PROCESSED_DIR, ACTIVITIES, ACTIVITY_TO_ID,
+    DATA_RAW_DIR, DATA_PROCESSED_DIR, ACTIVITIES, ACTIVITY_TO_ID, ID_TO_ACTIVITY,
     SAMPLING_RATE_HZ, SAMPLING_RATE_MS, WINDOW_SIZE_SAMPLES, WINDOW_OVERLAP_SAMPLES
 )
 
@@ -146,10 +146,82 @@ def load_all_recordings(data_dir: str = DATA_RAW_DIR) -> Dict[str, List[pd.DataF
                 if df is not None:
                     df['activity'] = activity
                     df['activity_id'] = ACTIVITY_TO_ID[activity]
+                    df['folder_name'] = folder_name  # Track source folder
                     recordings[activity].append(df)
                     print(f"Loaded {folder_name} -> {activity} ({len(df)} samples)")
     
     return recordings
+
+
+def load_recordings_with_holdout(
+    data_dir: str = DATA_RAW_DIR,
+    n_test_files: int = 2,
+    random_state: int = 42
+) -> Tuple[Dict[str, List[pd.DataFrame]], Dict[str, List[pd.DataFrame]], List[str]]:
+    """
+    Load recordings with file-level holdout for unbiased testing.
+    
+    Selects n_test_files recordings to hold out as unseen test data.
+    These files are completely excluded from training.
+    
+    Args:
+        data_dir: Path to the raw data directory
+        n_test_files: Number of files to hold out for testing
+        random_state: Random seed for reproducibility
+    
+    Returns:
+        train_recordings: Dict mapping activity to training DataFrames
+        test_recordings: Dict mapping activity to test DataFrames
+        test_file_names: List of held-out file names
+    """
+    np.random.seed(random_state)
+    
+    train_recordings = {activity: [] for activity in ACTIVITIES}
+    test_recordings = {activity: [] for activity in ACTIVITIES}
+    
+    if not os.path.exists(data_dir):
+        print(f"Data directory not found: {data_dir}")
+        return train_recordings, test_recordings, []
+    
+    # First pass: collect all folder info
+    all_folders = []
+    for folder_name in os.listdir(data_dir):
+        folder_path = os.path.join(data_dir, folder_name)
+        if os.path.isdir(folder_path):
+            activity = extract_activity_from_folder_name(folder_name)
+            if activity in ACTIVITIES:
+                all_folders.append((folder_name, folder_path, activity))
+    
+    # Select test files randomly
+    n_test = min(n_test_files, len(all_folders))
+    test_indices = np.random.choice(len(all_folders), n_test, replace=False)
+    test_file_names = []
+    
+    print("="*50)
+    print(f"FILE-LEVEL HOLDOUT: {n_test} files reserved for testing")
+    print("="*50)
+    
+    for i, (folder_name, folder_path, activity) in enumerate(all_folders):
+        df = load_recording(folder_path)
+        if df is not None:
+            df['activity'] = activity
+            df['activity_id'] = ACTIVITY_TO_ID[activity]
+            df['folder_name'] = folder_name
+            
+            if i in test_indices:
+                test_recordings[activity].append(df)
+                test_file_names.append(folder_name)
+                print(f"[TEST] {folder_name} -> {activity} ({len(df)} samples)")
+            else:
+                train_recordings[activity].append(df)
+                print(f"[TRAIN] {folder_name} -> {activity} ({len(df)} samples)")
+    
+    print("\nHeld-out test files:")
+    for fname in test_file_names:
+        print(f"  - {fname}")
+    print("="*50)
+    
+    return train_recordings, test_recordings, test_file_names
 
 
 def generate_synthetic_data(
@@ -382,11 +454,125 @@ def prepare_dataset(
     return all_windows, all_labels
 
 
+def prepare_dataset_with_holdout(
+    n_test_files: int = 2,
+    random_state: int = 42
+) -> Tuple[List[np.ndarray], List[int], List[np.ndarray], List[int], List[str]]:
+    """
+    Prepare dataset with file-level holdout for unbiased evaluation.
+    
+    Args:
+        n_test_files: Number of recording files to hold out for testing
+        random_state: Random seed for reproducibility
+    
+    Returns:
+        train_windows, train_labels, test_windows, test_labels, test_file_names
+    """
+    train_data, test_data, test_file_names = load_recordings_with_holdout(
+        n_test_files=n_test_files,
+        random_state=random_state
+    )
+    
+    def process_recordings(data_dict):
+        all_windows = []
+        all_labels = []
+        
+        for activity, recordings in data_dict.items():
+            if isinstance(recordings, pd.DataFrame):
+                recordings = [recordings]
+            
+            for recording in recordings:
+                processed = preprocess_data(recording)
+                windows = segment_into_windows(processed)
+                
+                for window in windows:
+                    sensor_data = window[['acc_x', 'acc_y', 'acc_z', 'gyro_x', 'gyro_y', 'gyro_z']].values
+                    all_windows.append(sensor_data)
+                    all_labels.append(ACTIVITY_TO_ID[activity])
+        
+        return all_windows, all_labels
+    
+    train_windows, train_labels = process_recordings(train_data)
+    test_windows, test_labels = process_recordings(test_data)
+    
+    print(f"\nTraining data: {len(train_windows)} windows")
+    print(f"Test data (unseen files): {len(test_windows)} windows")
+    
+    return train_windows, train_labels, test_windows, test_labels, test_file_names
+
+
 def save_processed_data(windows: List[np.ndarray], labels: List[int], filename: str = 'processed_data.npz'):
     """Save processed data to file."""
+    os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
     save_path = os.path.join(DATA_PROCESSED_DIR, filename)
     np.savez(save_path, windows=np.array(windows, dtype=object), labels=np.array(labels))
     print(f"Saved processed data to {save_path}")
+
+
+def save_train_test_split(
+    train_windows: List[np.ndarray],
+    train_labels: List[int],
+    test_windows: List[np.ndarray],
+    test_labels: List[int],
+    test_file_names: List[str]
+):
+    """
+    Save train/test split to separate folders in the processed data directory.
+    
+    Creates:
+    - data/processed/train/windows.npz
+    - data/processed/train/labels.npy
+    - data/processed/test/windows.npz
+    - data/processed/test/labels.npy
+    - data/processed/test/file_names.txt
+    """
+    train_dir = os.path.join(DATA_PROCESSED_DIR, 'train')
+    test_dir = os.path.join(DATA_PROCESSED_DIR, 'test')
+    
+    os.makedirs(train_dir, exist_ok=True)
+    os.makedirs(test_dir, exist_ok=True)
+    
+    # Save training data
+    np.savez(os.path.join(train_dir, 'windows.npz'), windows=np.array(train_windows, dtype=object))
+    np.save(os.path.join(train_dir, 'labels.npy'), np.array(train_labels))
+    
+    # Save test data
+    np.savez(os.path.join(test_dir, 'windows.npz'), windows=np.array(test_windows, dtype=object))
+    np.save(os.path.join(test_dir, 'labels.npy'), np.array(test_labels))
+    
+    # Save test file names
+    with open(os.path.join(test_dir, 'file_names.txt'), 'w') as f:
+        for fname in test_file_names:
+            f.write(fname + '\n')
+    
+    print(f"\nSaved train/test split:")
+    print(f"  {train_dir}/ ({len(train_windows)} windows)")
+    print(f"  {test_dir}/ ({len(test_windows)} windows)")
+
+
+def load_train_test_split() -> Tuple[List[np.ndarray], List[int], List[np.ndarray], List[int], List[str]]:
+    """
+    Load saved train/test split from processed data directory.
+    
+    Returns:
+        train_windows, train_labels, test_windows, test_labels, test_file_names
+    """
+    train_dir = os.path.join(DATA_PROCESSED_DIR, 'train')
+    test_dir = os.path.join(DATA_PROCESSED_DIR, 'test')
+    
+    train_windows = list(np.load(os.path.join(train_dir, 'windows.npz'), allow_pickle=True)['windows'])
+    train_labels = list(np.load(os.path.join(train_dir, 'labels.npy')))
+    test_windows = list(np.load(os.path.join(test_dir, 'windows.npz'), allow_pickle=True)['windows'])
+    test_labels = list(np.load(os.path.join(test_dir, 'labels.npy')))
+    
+    with open(os.path.join(test_dir, 'file_names.txt'), 'r') as f:
+        test_file_names = [line.strip() for line in f.readlines()]
+    
+    print(f"Loaded train/test split:")
+    print(f"  Training: {len(train_windows)} windows")
+    print(f"  Test: {len(test_windows)} windows")
+    
+    return train_windows, train_labels, test_windows, test_labels, test_file_names
 
 
 def load_processed_data(filename: str = 'processed_data.npz') -> Tuple[List[np.ndarray], List[int]]:

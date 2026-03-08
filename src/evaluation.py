@@ -505,6 +505,101 @@ def plot_feature_importance(
     return fig
 
 
+def plot_emission_probabilities(
+    model,
+    feature_names: List[str] = None,
+    top_k_features: int = 10,
+    title: str = "Emission Probability Parameters (Mean per State)",
+    save_path: str = None,
+    figsize: Tuple[int, int] = (14, 8)
+):
+    """
+    Visualize emission probability parameters (Gaussian means) for each state.
+    
+    Shows how each state (activity) has different emission distributions,
+    which is fundamental to HMM-based activity recognition.
+    
+    Args:
+        model: Trained HMM model with means attribute
+        feature_names: Names of features (optional)
+        top_k_features: Number of most discriminative features to show
+        title: Plot title
+        save_path: Path to save figure
+        figsize: Figure size
+    
+    Returns:
+        matplotlib figure
+    """
+    # Extract means from model
+    if hasattr(model, 'means'):
+        means = model.means
+    elif hasattr(model, 'means_'):
+        means = model.means_
+    else:
+        print("Cannot extract emission means from model")
+        return None
+    
+    n_states, n_features = means.shape
+    
+    # Find most discriminative features (highest variance across states)
+    feature_variance = np.var(means, axis=0)
+    top_indices = np.argsort(feature_variance)[::-1][:top_k_features]
+    
+    # Create feature labels
+    if feature_names is None:
+        feature_labels = [f"Feature {i}" for i in top_indices]
+    else:
+        feature_labels = [feature_names[i] if i < len(feature_names) else f"F{i}" for i in top_indices]
+    
+    # Create heatmap of emission means
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    
+    # Plot 1: Heatmap of emission means for top features
+    emission_subset = means[:, top_indices]
+    
+    sns.heatmap(
+        emission_subset,
+        annot=True,
+        fmt='.2f',
+        cmap='RdYlBu_r',
+        xticklabels=feature_labels,
+        yticklabels=ACTIVITIES[:n_states],
+        ax=axes[0],
+        cbar_kws={'label': 'Mean Value (Standardized)'}
+    )
+    axes[0].set_xlabel('Features', fontsize=12)
+    axes[0].set_ylabel('Activity (State)', fontsize=12)
+    axes[0].set_title('Emission Means by State\n(Most Discriminative Features)', fontsize=12)
+    axes[0].tick_params(axis='x', rotation=45)
+    
+    # Plot 2: Bar chart comparing means across activities for top 5 features
+    x = np.arange(min(5, top_k_features))
+    width = 0.2
+    colors = plt.cm.Set2(np.linspace(0, 1, n_states))
+    
+    for i, activity in enumerate(ACTIVITIES[:n_states]):
+        values = emission_subset[i, :5]
+        axes[1].bar(x + i * width, values, width, label=activity, color=colors[i])
+    
+    axes[1].set_xlabel('Feature', fontsize=12)
+    axes[1].set_ylabel('Emission Mean', fontsize=12)
+    axes[1].set_title('Emission Parameters Comparison', fontsize=12)
+    axes[1].set_xticks(x + width * (n_states - 1) / 2)
+    axes[1].set_xticklabels(feature_labels[:5], rotation=45, ha='right')
+    axes[1].legend(loc='upper right')
+    axes[1].grid(True, alpha=0.3, axis='y')
+    
+    plt.suptitle(title, fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Emission probability plot saved to {save_path}")
+    
+    plt.show()
+    return fig
+
+
 def create_evaluation_summary(
     y_true: np.ndarray,
     y_pred: np.ndarray,
