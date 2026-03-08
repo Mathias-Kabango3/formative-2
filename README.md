@@ -157,7 +157,7 @@ For each activity:
 | Member | Phone Model | Sampling Rate |
 |--------|-------------|---------------|
 | Mathias | OPPO CPH2641 | 20 Hz (10ms) |
-|  | | |
+| Daniel |IPHONE PRO 12 | 20Hz|
 
 ## Analysis Notes
 

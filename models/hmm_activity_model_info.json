@@ -1,8 +1,1 @@
-{
-  "n_training_samples": 1110,
-  "n_features": 130,
-  "n_states": 4,
-  "training_time": 10.307437,
-  "use_hmmlearn": false,
-  "timestamp": "2026-03-08T13:51:47.015241"
-}
+{}
